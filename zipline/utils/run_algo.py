@@ -123,7 +123,12 @@ def _run(handle_data,
             click.echo(algotext)
 
     if trading_calendar is None:
-        trading_calendar = get_calendar('NYSE')
+        # trading_calendar = get_calendar('NYSE')
+        # Revised by me.
+        if data_frequency == "minute":
+            target_calendar = get_calendar("24/7")
+        else:
+            target_calendar = get_calendar("NYSE")
 
     # date parameter validation
     if trading_calendar.session_distance(start, end) < 1:
@@ -212,6 +217,8 @@ def _run(handle_data,
             capital_base=capital_base,
             data_frequency=data_frequency,
             trading_calendar=trading_calendar,
+            # Revised by me: add emission_rate for minute
+            emission_rate = data_frequency
         ),
         metrics_set=metrics_set,
         blotter=blotter,

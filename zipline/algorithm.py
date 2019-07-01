@@ -756,15 +756,20 @@ class TradingAlgorithm(object):
             for perf in self.get_generator():
                 perfs.append(perf)
 
-            # convert perf dict to pandas dataframe
-            daily_stats = self._create_daily_stats(perfs)
 
-            self.analyze(daily_stats)
+            # convert perf dict to pandas dataframe
+            if self.sim_params.data_frequency == 'daily':
+                perf_stats = self._create_daily_stats(perfs)
+            elif self.sim_params.data_frequency == 'minute':
+                perf_stats = self._create_minute_stats(perfs)
+                # print("perfs in before _create_minute_stats:\n",perfs)
+                # print("minute_stats after _create_minute_stats:\n",minute_stats)              
+            self.analyze(perf_stats)
         finally:
             self.data_portal = None
             self.metrics_tracker = None
 
-        return daily_stats
+        return perf_stats
 
     def _write_and_map_id_index_to_sids(self, identifiers, as_of_date):
         # Build new Assets for identifiers that can't be resolved as
@@ -870,6 +875,42 @@ class TradingAlgorithm(object):
         return self.asset_finder.map_identifier_index_to_sids(
             identifiers, as_of_date,
         )
+
+    def _create_minute_stats(self, perfs):
+        # create minute and cumulative stats dataframe
+        minute_perfs = []
+        workDayStrList = self.trading_calendar.day.weekmask
+        # TODO: the loop here could overwrite expected properties
+        # of minute_perf. Could potentially raise or log a
+        # warning.
+        # perfDF = pd.DataFrame(perfs)
+        # print("daily stats perfs are:\n",perfDF.head(),"\n...\n",perfDF.tail())
+
+        for idx,perf in enumerate(perfs):
+            # print("index[ ",idx," ] perf is:")
+            # for p in perf:
+            #     print(p," = ",perf[p])
+            # print("\n")
+            if 'minute_perf' in perf:
+                perf['minute_perf'].update(
+                    perf['minute_perf'].pop('recorded_vars')
+                )
+                perf['minute_perf'].update(perf['cumulative_risk_metrics'])
+
+                daytime = int(perf['period_start'].strftime("%w"))
+                # Only analyze day is in the CustomBusinessDay of our calenday.
+                if (workDayStrList[daytime] == '1'):
+                    minute_perfs.append(perf['minute_perf'])
+            else:
+                self.risk_report = perf
+
+        minute_dts = pd.DatetimeIndex(
+            [p['period_close'] for p in minute_perfs], tz='UTC'
+        )
+       
+        minute_stats = pd.DataFrame(minute_perfs, index=minute_dts)
+
+        return minute_stats
 
     def _create_daily_stats(self, perfs):
         # create daily and cumulative stats dataframe
